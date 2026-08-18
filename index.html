@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Цифровой профиль ТО Росреестра</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand"><div class="brand-mark">РР</div><div><div class="brand-title">РОСРЕЕСТР</div><div class="brand-subtitle">Цифровой профиль ТО</div></div></div>
+      <nav>
+        <button class="nav-btn active" data-view="registry">Полный и точный реестр</button>
+        <button class="nav-btn" data-view="urd">УРД</button>
+        <button class="nav-btn" data-view="diagnostics">Диагностика файла</button>
+      </nav>
+      <div class="side-note">Excel обрабатывается локально в браузере и не загружается в GitHub.</div>
+    </aside>
+    <main class="main">
+      <header class="topbar">
+        <div><h1>Цифровой профиль территориальных органов Росреестра</h1><p>Автоматическая аналитика на основании Excel</p></div>
+        <label class="upload-btn" for="fileInput">Загрузить Excel</label>
+        <input id="fileInput" type="file" accept=".xlsx,.xls,.xlsm" hidden>
+      </header>
+      <section class="status-grid">
+        <article class="status-card"><span>Файл</span><strong id="fileName">Не загружен</strong></article>
+        <article class="status-card"><span>Листов найдено</span><strong id="sheetCount">0</strong></article>
+        <article class="status-card"><span>Ожидаемых листов</span><strong id="expectedCount">0 / 10</strong></article>
+        <article class="status-card"><span>Статус</span><strong id="parseStatus">Ожидание файла</strong></article>
+      </section>
+      <section id="emptyState" class="empty"><div class="empty-icon">XLSX</div><h2>Загрузите исходный Excel-файл</h2><p>Прототип проверит листы, региональные колонки и наличие блоков «Полный и точный реестр» и «УРД».</p><label class="upload-btn secondary" for="fileInput">Выбрать файл</label></section>
+      <section id="workspace" class="workspace hidden">
+        <div class="section-head"><div><div class="eyebrow">ПРОТОТИП 1</div><h2 id="viewTitle">Полный и точный реестр</h2></div><div class="badge">Файл считан локально</div></div>
+        <section id="registryView" class="view"><div class="kpi-row"><div class="kpi accent"><span>Листов с блоком</span><strong id="registryFound">0</strong></div><div class="kpi"><span>Региональных колонок</span><strong id="regionsFound">0</strong></div><div class="kpi"><span>Следующий этап</span><strong>Показатели + карта</strong></div></div><div class="panel"><h3>Что проверено</h3><p>Структура книги, ожидаемые листы, названия субъектов и наличие раздела «Полный и точный реестр».</p></div></section>
+        <section id="urdView" class="view hidden"><div class="kpi-row"><div class="kpi accent"><span>Листов с блоком</span><strong id="urdFound">0</strong></div><div class="kpi"><span>Региональных колонок</span><strong id="regionsFoundUrd">0</strong></div><div class="kpi"><span>Следующий этап</span><strong>KPI УРД + карта</strong></div></div><div class="panel"><h3>Что проверено</h3><p>Наличие раздела «УРД» на каждом листе и готовность файла к автоматическому извлечению показателей.</p></div></section>
+        <section id="diagnosticsView" class="view hidden"><div class="panel"><h3>Диагностика листов</h3><p class="muted">Если что-то не найдено, программа показывает это явно и ничего не подставляет случайно.</p><div class="table-wrap"><table><thead><tr><th>Лист</th><th>Регионов</th><th>Полный и точный реестр</th><th>УРД</th></tr></thead><tbody id="diagnosticsBody"></tbody></table></div></div></section>
+      </section>
+    </main>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
