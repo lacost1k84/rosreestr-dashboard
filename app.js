@@ -2,7 +2,7 @@ const EXPECTED_SHEETS=['ЦФО','СЗФО','ЮФО','СКФО','ПФО','УФО'
 const $=id=>document.getElementById(id); const norm=v=>String(v??'').replace(/\s+/g,' ').trim().toLowerCase();
 function matrix(ws){return XLSX.utils.sheet_to_json(ws,{header:1,raw:false,defval:''});}
 function hasPhrase(m,variants){const all=m.flat().map(norm).join(' | ');return variants.some(v=>all.includes(norm(v)));}
-function countRegions(m){let best=0;for(const row of m.slice(0,12)){let c=0;row.forEach((v,i)=>{if(i>=7&&String(v).trim()&&!/^\d+([.,]\d+)?%?$/.test(String(v).trim()))c++;});best=Math.max(best,c);}return best;}
+function countRegions(m){let best=0;for(const row of m.slice(0,12)){let c=0;row.forEach((v,i)=>{if(i>=9&&String(v).trim()&&!/^\d+([.,]\d+)?%?$/.test(String(v).trim()))c++;});best=Math.max(best,c);}return best;}
 function yn(v){return v?'<span class="ok">Найден</span>':'<span class="bad">Не найден</span>';}
 function showView(name){document.querySelectorAll('.view').forEach(v=>v.classList.add('hidden'));document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));const titles={registry:'Полный и точный реестр',urd:'УРД',diagnostics:'Диагностика файла'};$(name+'View').classList.remove('hidden');document.querySelector(`[data-view="${name}"]`).classList.add('active');$('viewTitle').textContent=titles[name];}
 document.querySelectorAll('.nav-btn').forEach(b=>b.addEventListener('click',()=>showView(b.dataset.view)));
