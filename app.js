@@ -5,7 +5,7 @@ const EXPECTED_SHEETS = [
 
 const MAIN_SHEETS = [
   'ЦФО','СЗФО','ЮФО','СКФО',
-  'ПФО','УФО','СФО','ДФО'
+  'ПФО','УФО','СФО','ДФО','НР1'
 ];
 
 const $ = id => document.getElementById(id);
