@@ -32,21 +32,35 @@ function hasMetric(m, number) {
 }
 
 function regionColumns(m) {
-  const header = m[2] || [];
-  const result = [];
+  let best = [];
 
-  for (let c = 9; c < header.length; c++) {
-    const name = String(header[c] ?? '').trim();
+  for (let r = 0; r < Math.min(12, m.length); r++) {
+    const row = m[r] || [];
+    const found = [];
 
-    if (name) {
-      result.push({
-        col: c,
-        name: name.replace(/\s+/g, ' ')
-      });
+    for (let c = 9; c < row.length; c++) {
+      const name = String(row[c] ?? '')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+      if (
+        name &&
+        /[А-Яа-яЁё]/.test(name) &&
+        !/^\d/.test(name)
+      ) {
+        found.push({
+          col: c,
+          name
+        });
+      }
+    }
+
+    if (found.length > best.length) {
+      best = found;
     }
   }
 
-  return result;
+  return best;
 }
 
 function fmt(value, type = 'number') {
