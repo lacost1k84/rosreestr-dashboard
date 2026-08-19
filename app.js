@@ -417,7 +417,122 @@ const state = {
   }
 };
 
+
 const $ = id => document.getElementById(id);
+
+function ensureV9Styles() {
+  if (document.getElementById('v9RuntimeStyles')) return;
+
+  const style = document.createElement('style');
+  style.id = 'v9RuntimeStyles';
+  style.textContent = `
+    .v9-region-focus{
+      margin-bottom:12px;
+      border-top:4px solid #26a269;
+      background:
+        linear-gradient(135deg,rgba(234,247,240,.88),rgba(255,255,255,.98) 45%);
+    }
+    .v9-focus-head{
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap:14px;
+      margin-bottom:14px;
+    }
+    .v9-focus-title{
+      margin:3px 0 2px;
+      color:#063f79;
+      font-size:20px;
+      line-height:1.15;
+      font-weight:900;
+    }
+    .v9-focus-meta{
+      color:#71849a;
+      font-size:12px;
+    }
+    .v9-focus-reset{
+      border:1px solid #cbdbe8;
+      background:#fff;
+      color:#063f79;
+      border-radius:10px;
+      min-height:36px;
+      padding:8px 11px;
+      font-weight:800;
+      cursor:pointer;
+      white-space:nowrap;
+    }
+    .v9-focus-grid{
+      display:grid;
+      grid-template-columns:repeat(4,minmax(0,1fr));
+      gap:9px;
+    }
+    .v9-focus-metric{
+      min-width:0;
+      padding:11px 12px;
+      border:1px solid #dbe6f0;
+      border-radius:12px;
+      background:rgba(255,255,255,.92);
+    }
+    .v9-focus-metric span{
+      display:block;
+      min-height:27px;
+      color:#71849a;
+      font-size:9px;
+      line-height:1.25;
+      font-weight:900;
+      text-transform:uppercase;
+      letter-spacing:.45px;
+    }
+    .v9-focus-metric strong{
+      display:block;
+      margin-top:5px;
+      color:#063f79;
+      font-size:20px;
+      line-height:1.05;
+    }
+    .v9-tech-zero{
+      color:#bd812b!important;
+    }
+    .v9-tech-note{
+      margin-top:9px;
+      color:#8a6a32;
+      font-size:11px;
+      line-height:1.35;
+    }
+    .v9-rank-note{
+      margin-bottom:8px;
+      padding:8px 9px;
+      border-radius:9px;
+      color:#8a6a32;
+      background:#fff7e8;
+      border:1px solid #f0deb9;
+      font-size:10px;
+      line-height:1.35;
+    }
+    .v9-rank-meta{
+      display:block;
+      margin-top:2px;
+      color:#8494a6;
+      font-size:9px;
+      font-weight:600;
+    }
+    .v9-table-tech{
+      background:#fffaf0!important;
+    }
+    .v9-table-status{
+      color:#bd812b;
+      font-size:9px;
+      font-weight:800;
+      white-space:nowrap;
+    }
+    @media(max-width:820px){
+      .v9-focus-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+      .v9-focus-title{font-size:18px}
+      .v9-focus-reset{font-size:11px}
+    }
+  `;
+  document.head.appendChild(style);
+}
 
 const norm = value =>
   String(value ?? '')
@@ -810,6 +925,8 @@ function dashboardTemplate(view) {
       </div>
     </div>
 
+    <div id="${view}RegionFocus" class="panel v9-region-focus hidden"></div>
+
     <div id="${view}Kpis" class="kpi-grid"></div>
 
     <div class="dashboard-grid">
@@ -968,11 +1085,7 @@ function bindDashboardControls(view) {
     renderDashboard(view);
   });
 
-  $(view + 'TableBody').addEventListener('click', event => {
-    const row = event.target.closest('tr[data-region]');
-    if (!row) return;
-
-    const region = row.dataset.region;
+  const selectRegion = region => {
     const found = state.data.find(x => x.region === region);
     if (!found) return;
 
@@ -983,6 +1096,29 @@ function bindDashboardControls(view) {
     populateRegionSelect(view);
     $(view + 'Region').value = found.region;
 
+    renderDashboard(view);
+  };
+
+  $(view + 'TableBody').addEventListener('click', event => {
+    const row = event.target.closest('tr[data-region]');
+    if (!row) return;
+    selectRegion(row.dataset.region);
+  });
+
+  [view + 'TopList', view + 'BottomList'].forEach(id => {
+    $(id).addEventListener('click', event => {
+      const row = event.target.closest('[data-region]');
+      if (!row) return;
+      selectRegion(row.dataset.region);
+    });
+  });
+
+  $(view + 'RegionFocus').addEventListener('click', event => {
+    const reset = event.target.closest('[data-reset-region]');
+    if (!reset) return;
+
+    state.filters[view].region = 'ALL';
+    populateRegionSelect(view);
     renderDashboard(view);
   });
 }
@@ -1007,10 +1143,33 @@ function validMetricRows(data, metricKey) {
     .filter(row => row.__value !== null);
 }
 
+function isTechnicalZero(row, metricKey, cfg) {
+  const value = finiteNumber(row[metricKey]);
+
+  // v9: по согласованному правилу нулевые значения качественных
+  // показателей на листе НР1 считаем техническими нулями.
+  // Исходное значение не меняется и остается видимым в таблице,
+  // но оно не участвует в среднем, рейтингах и цветовой шкале карты.
+  return (
+    cfg.ranking !== 'neutral' &&
+    row.district === 'НР1' &&
+    value === 0
+  );
+}
+
+function analyticMetricRows(data, metricKey, cfg) {
+  return validMetricRows(data, metricKey)
+    .filter(row => !isTechnicalZero(row, metricKey, cfg));
+}
+
+function technicalZeroRows(data, metricKey, cfg) {
+  return validMetricRows(data, metricKey)
+    .filter(row => isTechnicalZero(row, metricKey, cfg));
+}
+
 function aggregateValue(rows, metricKey, cfg) {
-  const values = rows
-    .map(row => finiteNumber(row[metricKey]))
-    .filter(value => value !== null);
+  const values = analyticMetricRows(rows, metricKey, cfg)
+    .map(row => row.__value);
 
   if (!values.length) return null;
 
@@ -1021,10 +1180,9 @@ function aggregateValue(rows, metricKey, cfg) {
   return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
-function medianValue(rows, metricKey) {
-  const values = rows
-    .map(row => finiteNumber(row[metricKey]))
-    .filter(value => value !== null)
+function medianValue(rows, metricKey, cfg) {
+  const values = analyticMetricRows(rows, metricKey, cfg)
+    .map(row => row.__value)
     .sort((a,b) => a - b);
 
   if (!values.length) return null;
@@ -1039,7 +1197,7 @@ function medianValue(rows, metricKey) {
 }
 
 function rankRows(rows, metricKey, cfg, best = true) {
-  let valid = validMetricRows(rows, metricKey);
+  let valid = analyticMetricRows(rows, metricKey, cfg);
 
   // Для объемных показателей нулевые значения не используем
   // в карточке/списке минимальных значений: это не управленческий
@@ -1069,10 +1227,84 @@ function scopeLabel(view) {
   return 'Все регионы';
 }
 
+function regionContextMetricKeys(view, currentKey) {
+  const base = view === 'registry'
+    ? ['egrn', 'noRights', 'landBorders', 'territorialZones']
+    : ['urdTotal', 'urdElectronic', 'mortgage24', 'grpDays'];
+
+  const unique = [currentKey, ...base]
+    .filter((key, index, arr) => arr.indexOf(key) === index);
+
+  return unique.slice(0, 4);
+}
+
+function renderRegionFocus(view, metricKey, cfg) {
+  const host = $(view + 'RegionFocus');
+  const selected = state.filters[view].region;
+
+  if (!host || selected === 'ALL') {
+    if (host) host.classList.add('hidden');
+    return;
+  }
+
+  const row = state.data.find(item => item.region === selected);
+  if (!row) {
+    host.classList.add('hidden');
+    return;
+  }
+
+  const metrics = getMetrics(view);
+  const keys = regionContextMetricKeys(view, metricKey);
+
+  const cells = keys.map(key => {
+    const metricCfg = metrics[key];
+    const value = finiteNumber(row[key]);
+    const techZero = isTechnicalZero(row, key, metricCfg);
+
+    return `
+      <div class="v9-focus-metric">
+        <span>${escapeHtml(metricCfg.short)}</span>
+        <strong class="${techZero ? 'v9-tech-zero' : ''}">
+          ${fmt(value, metricCfg.format)}
+        </strong>
+      </div>
+    `;
+  }).join('');
+
+  const currentTechZero = isTechnicalZero(row, metricKey, cfg);
+
+  host.innerHTML = `
+    <div class="v9-focus-head">
+      <div>
+        <div class="eyebrow">ВЫБРАННЫЙ СУБЪЕКТ</div>
+        <div class="v9-focus-title">${escapeHtml(row.region)}</div>
+        <div class="v9-focus-meta">${escapeHtml(row.district)}</div>
+      </div>
+
+      <button class="v9-focus-reset" type="button" data-reset-region>
+        Сбросить субъект
+      </button>
+    </div>
+
+    <div class="v9-focus-grid">${cells}</div>
+
+    ${currentTechZero ? `
+      <div class="v9-tech-note">
+        Значение 0 по выбранному качественному показателю на листе НР1
+        показано как исходное, но в v9 считается техническим нулем:
+        оно не участвует в среднем, ТОП/АНТИ и цветовой шкале карты.
+      </div>
+    ` : ''}
+  `;
+
+  host.classList.remove('hidden');
+}
+
 function renderKpis(view, rows, metricKey, cfg) {
-  const valid = validMetricRows(rows, metricKey);
+  const valid = analyticMetricRows(rows, metricKey, cfg);
+  const techZeros = technicalZeroRows(rows, metricKey, cfg);
   const aggregate = aggregateValue(rows, metricKey, cfg);
-  const median = medianValue(rows, metricKey);
+  const median = medianValue(rows, metricKey, cfg);
 
   const best = rankRows(rows, metricKey, cfg, true)[0] || null;
   const worst = rankRows(rows, metricKey, cfg, false)[0] || null;
@@ -1140,7 +1372,7 @@ function renderKpis(view, rows, metricKey, cfg) {
     <div class="kpi-card blue">
       <span>Среднее значение субъектов</span>
       <strong>${fmt(aggregate, cfg.format)}</strong>
-      <small>Регионов с данными: ${valid.length}</small>
+      <small>В расчете: ${valid.length}${techZeros.length ? ` • тех. нулей исключено: ${techZeros.length}` : ''}</small>
     </div>
 
     <div class="kpi-card">
@@ -1171,30 +1403,43 @@ function renderRankLists(view, rows, metricKey, cfg) {
 
   const top = rankRows(rows, metricKey, cfg, true).slice(0,10);
   const bottom = rankRows(rows, metricKey, cfg, false).slice(0,10);
+  const techZeros = technicalZeroRows(rows, metricKey, cfg);
 
-  $(view + 'TopList').innerHTML = top.length
-    ? top.map((row, index) => `
-        <div class="rank-row">
-          <div class="rank-pos">${index + 1}</div>
-          <div class="rank-name" title="${escapeHtml(row.region)}">
-            ${escapeHtml(row.region)}
-          </div>
-          <div class="rank-value">${fmt(row.__value, cfg.format)}</div>
-        </div>
-      `).join('')
-    : '<div class="map-note">Нет данных для текущего фильтра.</div>';
+  const exclusionNote = techZeros.length
+    ? `<div class="v9-rank-note">
+         Технические нули НР1 исключены из рейтинга: ${techZeros.length}.
+       </div>`
+    : '';
 
-  $(view + 'BottomList').innerHTML = bottom.length
-    ? bottom.map((row, index) => `
-        <div class="rank-row attn">
-          <div class="rank-pos">${index + 1}</div>
-          <div class="rank-name" title="${escapeHtml(row.region)}">
-            ${escapeHtml(row.region)}
+  $(view + 'TopList').innerHTML = exclusionNote + (
+    top.length
+      ? top.map((row, index) => `
+          <div class="rank-row" data-region="${escapeHtml(row.region)}">
+            <div class="rank-pos">${index + 1}</div>
+            <div class="rank-name" title="${escapeHtml(row.region)}">
+              ${escapeHtml(row.region)}
+              <span class="v9-rank-meta">${escapeHtml(row.district)}</span>
+            </div>
+            <div class="rank-value">${fmt(row.__value, cfg.format)}</div>
           </div>
-          <div class="rank-value">${fmt(row.__value, cfg.format)}</div>
-        </div>
-      `).join('')
-    : '<div class="map-note">Нет данных для текущего фильтра.</div>';
+        `).join('')
+      : '<div class="map-note">Нет данных для текущего фильтра.</div>'
+  );
+
+  $(view + 'BottomList').innerHTML = exclusionNote + (
+    bottom.length
+      ? bottom.map((row, index) => `
+          <div class="rank-row attn" data-region="${escapeHtml(row.region)}">
+            <div class="rank-pos">${index + 1}</div>
+            <div class="rank-name" title="${escapeHtml(row.region)}">
+              ${escapeHtml(row.region)}
+              <span class="v9-rank-meta">${escapeHtml(row.district)}</span>
+            </div>
+            <div class="rank-value">${fmt(row.__value, cfg.format)}</div>
+          </div>
+        `).join('')
+      : '<div class="map-note">Нет данных для текущего фильтра.</div>'
+  );
 }
 
 function districtAggregates(rows, metricKey, cfg) {
@@ -1312,24 +1557,44 @@ function compactAxis(value, format) {
 
 function renderTable(view, rows, metricKey, cfg) {
   const ranked = rankRows(rows, metricKey, cfg, true);
+  const techZeros = technicalZeroRows(rows, metricKey, cfg);
 
   $(view + 'ValueHeader').textContent = cfg.short;
   $(view + 'TableSubtitle').textContent =
-    `${scopeLabel(view)} • ${ranked.length} регионов с числовым значением`;
+    `${scopeLabel(view)} • в рейтинге: ${ranked.length}` +
+    (techZeros.length ? ` • технических нулей: ${techZeros.length}` : '');
 
-  $(view + 'TableBody').innerHTML = ranked.length
-    ? ranked.map((row, index) => `
-      <tr
-        data-region="${escapeHtml(row.region)}"
-        class="${state.filters[view].region === row.region ? 'selected' : ''}"
-      >
-        <td>${index + 1}</td>
-        <td><strong>${escapeHtml(row.district)}</strong></td>
-        <td>${escapeHtml(row.region)}</td>
-        <td class="value-cell">${fmt(row.__value, cfg.format)}</td>
-      </tr>
-    `).join('')
-    : '<tr><td colspan="4">Нет данных для текущего фильтра.</td></tr>';
+  const rankedHtml = ranked.map((row, index) => `
+    <tr
+      data-region="${escapeHtml(row.region)}"
+      class="${state.filters[view].region === row.region ? 'selected' : ''}"
+    >
+      <td>${index + 1}</td>
+      <td><strong>${escapeHtml(row.district)}</strong></td>
+      <td>${escapeHtml(row.region)}</td>
+      <td class="value-cell">${fmt(row.__value, cfg.format)}</td>
+    </tr>
+  `).join('');
+
+  const technicalHtml = techZeros.map(row => `
+    <tr
+      data-region="${escapeHtml(row.region)}"
+      class="v9-table-tech ${state.filters[view].region === row.region ? 'selected' : ''}"
+    >
+      <td>—</td>
+      <td><strong>${escapeHtml(row.district)}</strong></td>
+      <td>
+        ${escapeHtml(row.region)}
+        <span class="v9-table-status">технический ноль</span>
+      </td>
+      <td class="value-cell v9-tech-zero">${fmt(row.__value, cfg.format)}</td>
+    </tr>
+  `).join('');
+
+  $(view + 'TableBody').innerHTML =
+    (rankedHtml || technicalHtml)
+      ? rankedHtml + technicalHtml
+      : '<tr><td colspan="4">Нет данных для текущего фильтра.</td></tr>';
 }
 
 function prepareNameMatcher() {
@@ -1482,8 +1747,8 @@ async function ensureRussiaMap() {
   return result;
 }
 
-function valueRange(rows, metricKey) {
-  const values = validMetricRows(rows, metricKey).map(x => x.__value);
+function valueRange(rows, metricKey, cfg) {
+  const values = analyticMetricRows(rows, metricKey, cfg).map(x => x.__value);
   if (!values.length) return { min: 0, max: 1 };
 
   let min = Math.min(...values);
@@ -1534,13 +1799,14 @@ async function renderMap(view, rows, metricKey, cfg) {
     return;
   }
 
-  const valid = validMetricRows(rows, metricKey);
+  const numericRows = validMetricRows(rows, metricKey);
+  const valid = analyticMetricRows(rows, metricKey, cfg);
   const mapData = valid.map(row => ({
     name: row.region,
     value: row.__value
   }));
 
-  const range = valueRange(rows, metricKey);
+  const range = valueRange(rows, metricKey, cfg);
   const colors = mapColors(cfg);
 
   chart.setOption({
@@ -1610,15 +1876,15 @@ async function renderMap(view, rows, metricKey, cfg) {
     renderDashboard(view);
   });
 
-  const matchedCurrent = valid.filter(row =>
+  const matchedCurrent = numericRows.filter(row =>
     state.map.matchedNames.has(row.region)
   ).length;
 
-  const missingRows = valid.filter(row =>
+  const missingRows = numericRows.filter(row =>
     !state.map.matchedNames.has(row.region)
   );
 
-  badge.textContent = `На карте: ${matchedCurrent}/${valid.length}`;
+  badge.textContent = `На карте: ${matchedCurrent}/${numericRows.length}`;
 
   if (missingRows.length > 0) {
     const missingNames = missingRows
@@ -1636,7 +1902,7 @@ async function renderMap(view, rows, metricKey, cfg) {
     `;
   } else {
     note.textContent =
-      `Все ${valid.length} строк текущей выборки сопоставлены с геометрией карты.`;
+      `Все ${numericRows.length} строк текущей выборки сопоставлены с геометрией карты.`;
   }
 
   requestAnimationFrame(() => chart.resize());
@@ -1666,8 +1932,8 @@ function renderTileMap(view, rows, metricKey, cfg) {
   disposeChart(view + 'Map');
 
   const host = $(view + 'Map');
-  const valid = validMetricRows(rows, metricKey);
-  const range = valueRange(rows, metricKey);
+  const valid = analyticMetricRows(rows, metricKey, cfg);
+  const range = valueRange(rows, metricKey, cfg);
 
   host.innerHTML = `
     <div class="tile-map">
@@ -1707,6 +1973,7 @@ function renderDashboard(view) {
   const cfg = getMetrics(view)[metricKey];
   const rows = filteredData(view);
 
+  renderRegionFocus(view, metricKey, cfg);
   renderKpis(view, rows, metricKey, cfg);
   renderRankLists(view, rows, metricKey, cfg);
   renderDistrictChart(view, rows, metricKey, cfg);
@@ -1759,6 +2026,7 @@ async function processFile(file) {
     $('parseStatus').textContent = 'Данные извлечены';
 
     renderDiagnostics();
+    ensureV9Styles();
 
     $('emptyState').classList.add('hidden');
     $('workspace').classList.remove('hidden');
