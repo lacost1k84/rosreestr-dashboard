@@ -58,7 +58,61 @@ const REGION_MAP_ALIASES = {
   'татарстан': 'Республика Татарстан',
   'удмуртия': 'Удмуртская Республика',
   'бурятия': 'Республика Бурятия',
-  'хакасия': 'Республика Хакасия'
+  'хакасия': 'Республика Хакасия',
+
+  // Частые английские/сокращенные подписи в старых GeoJSON.
+  'nenets': 'Ненецкий АО',
+  'nenets autonomous': 'Ненецкий АО',
+  'nenets autonomous okrug': 'Ненецкий АО',
+  'khanty-mansiy': 'Ханты-Мансийский АО',
+  'khanty-mansi': 'Ханты-Мансийский АО',
+  'khanty-mansi autonomous okrug': 'Ханты-Мансийский АО',
+  'khanty-mansiyskiy': 'Ханты-Мансийский АО',
+  'yamal-nenets': 'Ямало-Ненецкий АО',
+  'yamalo-nenets': 'Ямало-Ненецкий АО',
+  'yamalo-nenets autonomous okrug': 'Ямало-Ненецкий АО',
+  'jewish autonomous': 'Еврейская АО',
+  'jewish autonomous oblast': 'Еврейская АО',
+  'chukot': 'Чукотский АО',
+  'chukotka': 'Чукотский АО',
+  'chukot autonomous okrug': 'Чукотский АО',
+
+  'karachay-cherkess': 'Карачаево-Черкесская Республика',
+  'karachay-cherkessia': 'Карачаево-Черкесская Республика',
+  'kabardin-balkar': 'Кабардино-Балкарская Республика',
+  'kabardino-balkar': 'Кабардино-Балкарская Республика',
+  'north ossetia': 'Республика Северная Осетия - Алания',
+  'north ossetia-alania': 'Республика Северная Осетия - Алания',
+  'chechnya': 'Чеченская Республика',
+  'chechen': 'Чеченская Республика',
+
+  'altay': 'Республика Алтай',
+  'altai republic': 'Республика Алтай',
+  'altay republic': 'Республика Алтай',
+  'altai krai': 'Алтайский край',
+  'altay krai': 'Алтайский край',
+
+  'sakha': 'Республика Саха (Якутия)',
+  'sakha yakutia': 'Республика Саха (Якутия)',
+  'buryat': 'Республика Бурятия',
+  'buryatia': 'Республика Бурятия',
+  'tuva': 'Республика Тыва',
+  'khakass': 'Республика Хакасия',
+  'khakassia': 'Республика Хакасия',
+
+  'adygey': 'Республика Адыгея',
+  'adygea': 'Республика Адыгея',
+  'kalmyk': 'Республика Калмыкия',
+  'kalmykia': 'Республика Калмыкия',
+  'dagestan': 'Республика Дагестан',
+  'ingushetia': 'Республика Ингушетия',
+  'bashkortostan': 'Республика Башкортостан',
+  'mari-el': 'Республика Марий Эл',
+  'mari el': 'Республика Марий Эл',
+  'mordovia': 'Республика Мордовия',
+  'tatarstan': 'Республика Татарстан',
+  'udmurt': 'Удмуртская Республика',
+  'udmurtia': 'Удмуртская Республика'
 };
 
 const REGISTRY_METRICS = {
@@ -939,8 +993,33 @@ function aggregateValue(rows, metricKey, cfg) {
   return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
+function medianValue(rows, metricKey) {
+  const values = rows
+    .map(row => finiteNumber(row[metricKey]))
+    .filter(value => value !== null)
+    .sort((a,b) => a - b);
+
+  if (!values.length) return null;
+
+  const middle = Math.floor(values.length / 2);
+
+  if (values.length % 2 === 1) {
+    return values[middle];
+  }
+
+  return (values[middle - 1] + values[middle]) / 2;
+}
+
 function rankRows(rows, metricKey, cfg, best = true) {
-  const valid = validMetricRows(rows, metricKey);
+  let valid = validMetricRows(rows, metricKey);
+
+  // Для объемных показателей нулевые значения не используем
+  // в карточке/списке минимальных значений: это не управленческий
+  // "худший результат" и часто делает рейтинг неинформативным.
+  if (cfg.ranking === 'neutral' && !best) {
+    const positive = valid.filter(row => row.__value > 0);
+    if (positive.length) valid = positive;
+  }
 
   if (cfg.ranking === 'low') {
     valid.sort((a,b) =>
@@ -965,6 +1044,7 @@ function scopeLabel(view) {
 function renderKpis(view, rows, metricKey, cfg) {
   const valid = validMetricRows(rows, metricKey);
   const aggregate = aggregateValue(rows, metricKey, cfg);
+  const median = medianValue(rows, metricKey);
 
   const best = rankRows(rows, metricKey, cfg, true)[0] || null;
   const worst = rankRows(rows, metricKey, cfg, false)[0] || null;
@@ -977,17 +1057,52 @@ function renderKpis(view, rows, metricKey, cfg) {
     ? finiteNumber(state.sourceRf[view][metricKey])
     : null;
 
-  const primaryValue = sourceRf !== null ? sourceRf : aggregate;
+  // Объемные показатели (шт., шт./день):
+  // РФ/выборка → максимум → медиана → количество регионов.
+  // Здесь "лучше/хуже" не применяется.
+  if (cfg.ranking === 'neutral') {
+    const primaryValue = sourceRf !== null ? sourceRf : aggregate;
+    const primaryLabel = sourceRf !== null
+      ? 'Показатель по РФ в исходном файле'
+      : 'Сумма по текущему фильтру';
 
+    $(''+view+'Kpis').innerHTML = `
+      <div class="kpi-card primary">
+        <span>${primaryLabel}</span>
+        <strong>${fmt(primaryValue, cfg.format)}</strong>
+        <small>${escapeHtml(scopeLabel(view))}</small>
+      </div>
+
+      <div class="kpi-card blue">
+        <span>Максимальное значение</span>
+        <strong>${best ? fmt(best.__value, cfg.format) : '—'}</strong>
+        <small>${best ? escapeHtml(best.region) : 'Нет данных'}</small>
+      </div>
+
+      <div class="kpi-card">
+        <span>Медиана субъектов</span>
+        <strong>${fmt(median, cfg.format)}</strong>
+        <small>Медианное значение текущей выборки</small>
+      </div>
+
+      <div class="kpi-card attention">
+        <span>Регионов с данными</span>
+        <strong>${valid.length}</strong>
+        <small>Из ${rows.length} строк текущей выборки</small>
+      </div>
+    `;
+
+    return;
+  }
+
+  // Качественные показатели:
+  // РФ → среднее субъектов → лучший → зона внимания.
+  const primaryValue = sourceRf !== null ? sourceRf : aggregate;
   const primaryLabel = sourceRf !== null
     ? 'Показатель по РФ в исходном файле'
-    : (cfg.aggregate === 'sum' ? 'Сумма по выборке' : 'Среднее по выборке');
+    : 'Среднее по текущему фильтру';
 
-  const secondLabel = cfg.aggregate === 'sum'
-    ? 'Сумма по текущему фильтру'
-    : 'Среднее значение субъектов';
-
-  $(view + 'Kpis').innerHTML = `
+  $(''+view+'Kpis').innerHTML = `
     <div class="kpi-card primary">
       <span>${primaryLabel}</span>
       <strong>${fmt(primaryValue, cfg.format)}</strong>
@@ -995,19 +1110,19 @@ function renderKpis(view, rows, metricKey, cfg) {
     </div>
 
     <div class="kpi-card blue">
-      <span>${secondLabel}</span>
+      <span>Среднее значение субъектов</span>
       <strong>${fmt(aggregate, cfg.format)}</strong>
       <small>Регионов с данными: ${valid.length}</small>
     </div>
 
     <div class="kpi-card">
-      <span>${cfg.ranking === 'neutral' ? 'Максимальное значение' : 'Лучший результат'}</span>
+      <span>Лучший результат</span>
       <strong>${best ? fmt(best.__value, cfg.format) : '—'}</strong>
       <small>${best ? escapeHtml(best.region) : 'Нет данных'}</small>
     </div>
 
     <div class="kpi-card attention">
-      <span>${cfg.ranking === 'neutral' ? 'Минимальное значение' : 'Зона внимания'}</span>
+      <span>Зона внимания</span>
       <strong>${worst ? fmt(worst.__value, cfg.format) : '—'}</strong>
       <small>${worst ? escapeHtml(worst.region) : 'Нет данных'}</small>
     </div>
@@ -1016,7 +1131,7 @@ function renderKpis(view, rows, metricKey, cfg) {
 
 function rankTitles(cfg) {
   if (cfg.ranking === 'neutral') {
-    return ['Максимальные значения', 'Минимальные значения'];
+    return ['Наибольшие значения', 'Наименьшие ненулевые значения'];
   }
   return ['ТОП-10', 'АНТИ-10'];
 }
@@ -1450,21 +1565,48 @@ async function renderMap(view, rows, metricKey, cfg) {
     state.map.matchedNames.has(row.region)
   ).length;
 
+  const missingRows = valid.filter(row =>
+    !state.map.matchedNames.has(row.region)
+  );
+
   badge.textContent = `На карте: ${matchedCurrent}/${valid.length}`;
 
-  const missing = valid.length - matchedCurrent;
-  note.textContent = missing > 0
-    ? `В аналитике учтены все ${valid.length} строк с данными. Публичный GeoJSON содержит или однозначно сопоставляет геометрию для ${matchedCurrent}; остальные ${missing} строк продолжают участвовать в KPI, рейтингах и таблице.`
-    : `Все ${valid.length} строк текущей выборки сопоставлены с геометрией карты.`;
+  if (missingRows.length > 0) {
+    const missingNames = missingRows
+      .map(row => escapeHtml(row.region))
+      .join(', ');
+
+    note.innerHTML = `
+      <strong>Не отображены на географической карте (${missingRows.length}):</strong>
+      ${missingNames}.
+      <br>
+      Все эти строки продолжают участвовать в KPI, рейтингах,
+      сравнении ФО и таблице. Причина — отсутствие или несовпадение
+      геометрии/названия в подключенном публичном GeoJSON.
+    `;
+  } else {
+    note.textContent =
+      `Все ${valid.length} строк текущей выборки сопоставлены с геометрией карты.`;
+  }
 
   requestAnimationFrame(() => chart.resize());
 }
 
 function tileColor(value, min, max, cfg) {
-  const t = max === min ? .5 : Math.max(0, Math.min(1, (value - min) / (max - min)));
+  const t = max === min
+    ? .5
+    : Math.max(0, Math.min(1, (value - min) / (max - min)));
+
+  if (cfg.ranking === 'neutral') {
+    const alpha = .16 + t * .62;
+    return `rgba(13,104,178,${alpha.toFixed(3)})`;
+  }
+
   let effective = t;
 
-  if (cfg.ranking === 'low') effective = 1 - t;
+  if (cfg.ranking === 'low') {
+    effective = 1 - t;
+  }
 
   const alpha = .16 + effective * .58;
   return `rgba(38,162,105,${alpha.toFixed(3)})`;
