@@ -112,7 +112,35 @@ const REGION_MAP_ALIASES = {
   'mordovia': 'Республика Мордовия',
   'tatarstan': 'Республика Татарстан',
   'udmurt': 'Удмуртская Республика',
-  'udmurtia': 'Удмуртская Республика'
+  'udmurtia': 'Удмуртская Республика',
+
+  // Варианты GADM/старых международных справочников.
+  'moskva': 'Москва',
+  'moscow federal city': 'Москва',
+  'city of moscow': 'Москва',
+
+  'sankt-peterburg': 'Санкт-Петербург',
+  'sankt peterburg': 'Санкт-Петербург',
+  'saint-petersburg': 'Санкт-Петербург',
+  'city of st petersburg': 'Санкт-Петербург',
+  'city of saint petersburg': 'Санкт-Петербург',
+  'st. petersburg': 'Санкт-Петербург',
+
+  'sevastopol city': 'Севастополь',
+  "sevastopol'": 'Севастополь',
+  'sevastopol city municipality': 'Севастополь',
+
+  'adygey': 'Республика Адыгея',
+  'adygeya': 'Республика Адыгея',
+  'republic of adygea': 'Республика Адыгея',
+
+  'tatarstan': 'Республика Татарстан',
+  'republic of tatarstan': 'Республика Татарстан',
+
+  'khanty-mansiy': 'Ханты-Мансийский АО',
+  'khanty-mansi': 'Ханты-Мансийский АО',
+  'khanty-mansi autonomous area': 'Ханты-Мансийский АО',
+  'khanty-mansi autonomous okrug': 'Ханты-Мансийский АО'
 };
 
 const REGISTRY_METRICS = {
@@ -1388,20 +1416,41 @@ async function ensureRussiaMap() {
       (geoJson.features || []).forEach(feature => {
         const props = feature.properties || (feature.properties = {});
 
-        const rawName =
-          props.NL_NAME_1 ||
-          props.NAME_1 ||
-          props['name:ru'] ||
-          props.name ||
-          '';
+        const candidates = [];
 
-        const dashboardName = matchName(rawName);
+        [
+          props.NL_NAME_1,
+          props.NAME_1,
+          props['name:ru'],
+          props.name,
+          props.NAME_ENG,
+          props.ENG_NAME,
+          props.VARNAME_1
+        ].forEach(value => {
+          if (!value) return;
+
+          String(value)
+            .split('|')
+            .map(x => x.trim())
+            .filter(Boolean)
+            .forEach(x => candidates.push(x));
+        });
+
+        // Пробуем сопоставить субъект по любому доступному названию:
+        // русскому, английскому или альтернативному из VARNAME_1.
+        let dashboardName = null;
+
+        for (const candidate of candidates) {
+          dashboardName = matchName(candidate);
+          if (dashboardName) break;
+        }
 
         if (dashboardName) {
           props.dashboardName = dashboardName;
           matched.add(dashboardName);
         } else {
-          props.dashboardName = cleanRegionLabel(rawName);
+          props.dashboardName =
+            cleanRegionLabel(candidates[0] || props.NAME_1 || props.name || '');
         }
 
         // Чукотка в исходном GeoJSON пересекает 180-й меридиан.
@@ -1581,8 +1630,9 @@ async function renderMap(view, rows, metricKey, cfg) {
       ${missingNames}.
       <br>
       Все эти строки продолжают участвовать в KPI, рейтингах,
-      сравнении ФО и таблице. Причина — отсутствие или несовпадение
-      геометрии/названия в подключенном публичном GeoJSON.
+      сравнении ФО и таблице. Причина — либо в подключенном публичном
+      GeoJSON нет отдельной геометрии для этой строки, либо его справочник
+      использует другое наименование, которое еще не удалось однозначно сопоставить.
     `;
   } else {
     note.textContent =
