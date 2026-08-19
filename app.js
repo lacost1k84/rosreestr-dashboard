@@ -1089,10 +1089,10 @@ function bindDashboardControls(view) {
     const found = state.data.find(x => x.region === region);
     if (!found) return;
 
-    state.filters[view].district = found.district;
+    // v10: выбор субъекта — это фокус, а не сужение всей аналитики.
+    // ФО/группа остаётся таким, каким пользователь выбрал его в фильтре.
     state.filters[view].region = found.region;
 
-    $(view + 'District').value = found.district;
     populateRegionSelect(view);
     $(view + 'Region').value = found.region;
 
@@ -1126,11 +1126,10 @@ function bindDashboardControls(view) {
 function filteredData(view) {
   const filter = state.filters[view];
 
+  // v10: выбранный субъект не сужает ТОП/АНТИ, KPI, карту и таблицу
+  // до одной строки. Он отображается отдельной карточкой и подсвечивается.
   return state.data.filter(row => {
     if (filter.district !== 'ALL' && row.district !== filter.district) {
-      return false;
-    }
-    if (filter.region !== 'ALL' && row.region !== filter.region) {
       return false;
     }
     return true;
@@ -1222,7 +1221,6 @@ function rankRows(rows, metricKey, cfg, best = true) {
 
 function scopeLabel(view) {
   const f = state.filters[view];
-  if (f.region !== 'ALL') return f.region;
   if (f.district !== 'ALL') return f.district;
   return 'Все регионы';
 }
@@ -1272,13 +1270,23 @@ function renderRegionFocus(view, metricKey, cfg) {
   }).join('');
 
   const currentTechZero = isTechnicalZero(row, metricKey, cfg);
+  const comparisonRows = filteredData(view);
+  const ranking = rankRows(comparisonRows, metricKey, cfg, true);
+  const position = ranking.findIndex(item => item.region === row.region);
+  const positionText = currentTechZero
+    ? 'вне рейтинга: технический ноль'
+    : (position >= 0
+        ? `место ${position + 1} из ${ranking.length}`
+        : 'нет числового значения для рейтинга');
 
   host.innerHTML = `
     <div class="v9-focus-head">
       <div>
         <div class="eyebrow">ВЫБРАННЫЙ СУБЪЕКТ</div>
         <div class="v9-focus-title">${escapeHtml(row.region)}</div>
-        <div class="v9-focus-meta">${escapeHtml(row.district)}</div>
+        <div class="v9-focus-meta">
+          ${escapeHtml(row.district)} • ${escapeHtml(positionText)}
+        </div>
       </div>
 
       <button class="v9-focus-reset" type="button" data-reset-region>
@@ -1291,10 +1299,16 @@ function renderRegionFocus(view, metricKey, cfg) {
     ${currentTechZero ? `
       <div class="v9-tech-note">
         Значение 0 по выбранному качественному показателю на листе НР1
-        показано как исходное, но в v9 считается техническим нулем:
+        показано как исходное, но считается техническим нулем:
         оно не участвует в среднем, ТОП/АНТИ и цветовой шкале карты.
       </div>
-    ` : ''}
+    ` : `
+      <div class="v9-tech-note">
+        Выбор субъекта не сужает аналитику до одной строки.
+        KPI, ТОП/АНТИ, карта и рейтинг продолжают показывать
+        ${escapeHtml(scopeLabel(view))}; выбранный субъект подсвечивается для сравнения.
+      </div>
+    `}
   `;
 
   host.classList.remove('hidden');
@@ -1310,8 +1324,7 @@ function renderKpis(view, rows, metricKey, cfg) {
   const worst = rankRows(rows, metricKey, cfg, false)[0] || null;
 
   const isAll =
-    state.filters[view].district === 'ALL' &&
-    state.filters[view].region === 'ALL';
+    state.filters[view].district === 'ALL';
 
   const sourceRf = isAll
     ? finiteNumber(state.sourceRf[view][metricKey])
@@ -1497,9 +1510,10 @@ function renderDistrictChart(view, rows, metricKey, cfg) {
   if (!chart) return;
 
   const data = districtAggregates(rows, metricKey, cfg);
+  const selectedDistrict = state.filters[view].district;
 
   $(view + 'DistrictSubtitle').textContent =
-    `${cfg.short}: ${cfg.aggregate === 'sum' ? 'сумма' : 'среднее'} по субъектам`;
+    `${cfg.short}: ${cfg.aggregate === 'sum' ? 'сумма' : 'среднее'} по субъектам • сравнение всех ФО / групп`;
 
   chart.setOption({
     animationDuration: 350,
@@ -1530,12 +1544,17 @@ function renderDistrictChart(view, rows, metricKey, cfg) {
     },
     series: [{
       type: 'bar',
-      data: data.map(x => x.value),
+      data: data.map(x => ({
+        value: x.value,
+        itemStyle: {
+          color:
+            selectedDistrict !== 'ALL' && x.district === selectedDistrict
+              ? '#26a269'
+              : '#0d68b2',
+          borderRadius: [0,6,6,0]
+        }
+      })),
       barMaxWidth: 22,
-      itemStyle: {
-        color: '#0d68b2',
-        borderRadius: [0,6,6,0]
-      },
       label: {
         show: true,
         position: 'right',
@@ -1779,7 +1798,11 @@ async function renderMap(view, rows, metricKey, cfg) {
   const note = $(view + 'MapNote');
   const subtitle = $(view + 'MapSubtitle');
 
-  subtitle.textContent = `${cfg.label} • ${scopeLabel(view)}`;
+  const selectedRegion = state.filters[view].region;
+
+  subtitle.textContent =
+    `${cfg.label} • ${scopeLabel(view)}` +
+    (selectedRegion !== 'ALL' ? ` • выбран: ${selectedRegion}` : '');
   badge.textContent = 'Подготовка карты';
   note.textContent = '';
 
@@ -1803,7 +1826,16 @@ async function renderMap(view, rows, metricKey, cfg) {
   const valid = analyticMetricRows(rows, metricKey, cfg);
   const mapData = valid.map(row => ({
     name: row.region,
-    value: row.__value
+    value: row.__value,
+    itemStyle:
+      selectedRegion !== 'ALL' && row.region === selectedRegion
+        ? {
+            borderColor: '#063f79',
+            borderWidth: 2.8,
+            shadowBlur: 8,
+            shadowColor: 'rgba(6,63,121,.28)'
+          }
+        : undefined
   }));
 
   const range = valueRange(rows, metricKey, cfg);
@@ -1866,10 +1898,8 @@ async function renderMap(view, rows, metricKey, cfg) {
     const found = state.data.find(x => x.region === region);
     if (!found) return;
 
-    state.filters[view].district = found.district;
     state.filters[view].region = found.region;
 
-    $(view + 'District').value = found.district;
     populateRegionSelect(view);
     $(view + 'Region').value = found.region;
 
@@ -1956,9 +1986,7 @@ function renderTileMap(view, rows, metricKey, cfg) {
       const found = state.data.find(x => x.region === region);
       if (!found) return;
 
-      state.filters[view].district = found.district;
       state.filters[view].region = found.region;
-      $(view + 'District').value = found.district;
       populateRegionSelect(view);
       $(view + 'Region').value = found.region;
       renderDashboard(view);
@@ -1976,7 +2004,11 @@ function renderDashboard(view) {
   renderRegionFocus(view, metricKey, cfg);
   renderKpis(view, rows, metricKey, cfg);
   renderRankLists(view, rows, metricKey, cfg);
-  renderDistrictChart(view, rows, metricKey, cfg);
+
+  // Сравнение ФО должно сохранять смысл даже при выбранном субъекте
+  // или конкретном ФО: показываем все группы, а выбранную подсвечиваем.
+  renderDistrictChart(view, state.data, metricKey, cfg);
+
   renderTable(view, rows, metricKey, cfg);
   renderMap(view, rows, metricKey, cfg);
 }
