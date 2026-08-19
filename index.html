@@ -1,130 +1,511 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ru">
+
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Цифровой профиль ТО Росреестра</title>
-<link rel="stylesheet" href="styles.css">
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+  <meta charset="utf-8">
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1, viewport-fit=cover"
+  >
+
+  <meta
+    name="theme-color"
+    content="#063f79"
+  >
+
+  <title>
+    Цифровой профиль ТО Росреестра
+  </title>
+
+  <link
+    rel="stylesheet"
+    href="styles.css?v=5"
+  >
 </head>
+
+
 <body>
-<div class="app">
-  <aside class="sidebar">
-    <div class="brand">
-      <div class="brand-mark">РР</div>
-      <div>
-        <div class="brand-title">РОСРЕЕСТР</div>
-        <div class="brand-subtitle">Цифровой профиль ТО</div>
-      </div>
-    </div>
-    <nav class="nav">
-      <button class="nav-btn active" data-view="registry">
-        <span class="nav-dot"></span>
-        Полный и точный реестр
-      </button>
-      <button class="nav-btn" data-view="urd">
-        <span class="nav-dot"></span>
-        УРД
-      </button>
-      <button class="nav-btn" data-view="diagnostics">
-        <span class="nav-dot"></span>
-        Диагностика файла
-      </button>
-    </nav>
-    <div class="side-note">
-      <strong>Локальная обработка</strong>
-      <span>Excel считывается в браузере и не загружается в GitHub.</span>
-    </div>
-  </aside>
 
-  <main class="main">
-    <div class="topbar">
-      <div class="topbar-copy">
-        <div class="eyebrow">ЦИФРОВОЙ ПРОФИЛЬ РЕГИОНОВ</div>
-        <h1>Аналитический дашборд Росреестра</h1>
-        <p>«Полный и точный реестр» и УРД по данным загруженного Excel</p>
+  <div class="app">
+
+
+    <!-- ========================================= -->
+    <!-- ЛЕВОЕ МЕНЮ -->
+    <!-- ========================================= -->
+
+    <aside class="sidebar">
+
+
+      <div class="brand">
+
+        <div class="brand-mark">
+          РР
+        </div>
+
+        <div>
+
+          <div class="brand-title">
+            РОСРЕЕСТР
+          </div>
+
+          <div class="brand-subtitle">
+            Цифровой профиль ТО
+          </div>
+
+        </div>
+
       </div>
-      <div class="topbar-actions">
-        <label class="upload-btn" for="fileInput">
-          <span>＋</span>
-          Загрузить Excel
+
+
+      <nav class="nav">
+
+
+        <button
+          class="nav-btn active"
+          data-view="registry"
+        >
+
+          <span class="nav-dot"></span>
+
+          Полный и точный реестр
+
+        </button>
+
+
+        <button
+          class="nav-btn"
+          data-view="urd"
+        >
+
+          <span class="nav-dot"></span>
+
+          УРД
+
+        </button>
+
+
+        <button
+          class="nav-btn"
+          data-view="diagnostics"
+        >
+
+          <span class="nav-dot"></span>
+
+          Диагностика файла
+
+        </button>
+
+
+      </nav>
+
+
+      <div class="side-note">
+
+        <strong>
+          Локальная обработка
+        </strong>
+
+        <span>
+          Excel считывается в браузере
+          и не загружается в GitHub.
+        </span>
+
+      </div>
+
+
+    </aside>
+
+
+
+    <!-- ========================================= -->
+    <!-- ОСНОВНАЯ ЧАСТЬ -->
+    <!-- ========================================= -->
+
+    <main class="main">
+
+
+      <!-- ======================================= -->
+      <!-- ШАПКА -->
+      <!-- ======================================= -->
+
+      <header class="topbar">
+
+
+        <div class="topbar-copy">
+
+          <div class="eyebrow">
+            ЦИФРОВОЙ ПРОФИЛЬ РЕГИОНОВ
+          </div>
+
+          <h1>
+            Аналитический дашборд Росреестра
+          </h1>
+
+          <p>
+            «Полный и точный реестр»
+            и УРД по данным загруженного Excel
+          </p>
+
+        </div>
+
+
+
+        <div class="topbar-actions">
+
+          <label
+            class="upload-btn"
+            for="fileInput"
+          >
+
+            <span>
+              ＋
+            </span>
+
+            Загрузить Excel
+
+          </label>
+
+
+          <input
+            id="fileInput"
+            type="file"
+            accept=".xlsx,.xls,.xlsm"
+            hidden
+          >
+
+        </div>
+
+
+      </header>
+
+
+
+      <!-- ======================================= -->
+      <!-- ИНФОРМАЦИЯ О ФАЙЛЕ -->
+      <!-- ======================================= -->
+
+      <section class="file-strip">
+
+
+        <div class="file-strip-item file-wide">
+
+          <span>
+            Файл
+          </span>
+
+          <strong id="fileName">
+            Не загружен
+          </strong>
+
+        </div>
+
+
+
+        <div class="file-strip-item">
+
+          <span>
+            Листов
+          </span>
+
+          <strong id="sheetCount">
+            0
+          </strong>
+
+        </div>
+
+
+
+        <div class="file-strip-item">
+
+          <span>
+            Ожидаемых
+          </span>
+
+          <strong id="expectedCount">
+            0 / 10
+          </strong>
+
+        </div>
+
+
+
+        <div class="file-strip-item">
+
+          <span>
+            Регионов
+          </span>
+
+          <strong id="regionCount">
+            0
+          </strong>
+
+        </div>
+
+
+
+        <div class="file-strip-item status-item">
+
+          <span>
+            Статус
+          </span>
+
+          <strong id="parseStatus">
+            Ожидание файла
+          </strong>
+
+        </div>
+
+
+      </section>
+
+
+
+      <!-- ======================================= -->
+      <!-- ЭКРАН ДО ЗАГРУЗКИ EXCEL -->
+      <!-- ======================================= -->
+
+      <section
+        id="emptyState"
+        class="empty-state"
+      >
+
+
+        <div class="empty-icon">
+          XLSX
+        </div>
+
+
+        <div class="eyebrow">
+          ШАГ 1
+        </div>
+
+
+        <h2>
+          Загрузите исходный Excel
+        </h2>
+
+
+        <p>
+
+          Дашборд автоматически распознает
+          листы федеральных округов,
+          89 региональных строк
+          и показатели
+          «Полного и точного реестра»
+          и УРД.
+
+        </p>
+
+
+        <label
+          class="upload-btn secondary"
+          for="fileInput"
+        >
+
+          Выбрать файл
+
         </label>
-        <input type="file" id="fileInput" accept=".xlsx,.xls" hidden>
-      </div>
-    </div>
 
-    <div class="file-strip">
-      <div class="file-strip-item file-wide">
-        <span>Файл</span>
-        <strong id="fileName">Не загружен</strong>
-      </div>
-      <div class="file-strip-item">
-        <span>Листов</span>
-        <strong id="sheetCount">0</strong>
-      </div>
-      <div class="file-strip-item">
-        <span>Ожидаемых</span>
-        <strong id="expectedCount">0 / 10</strong>
-      </div>
-      <div class="file-strip-item">
-        <span>Регионов</span>
-        <strong id="regionCount">0</strong>
-      </div>
-      <div class="file-strip-item status-item">
-        <span>Статус</span>
-        <strong id="parseStatus">Ожидание файла</strong>
-      </div>
-    </div>
 
-    <div id="emptyState" class="empty-state">
-      <div class="empty-icon">XLSX</div>
-      <h2>ШАГ 1</h2>
-      <p>Загрузите исходный Excel. Дашборд автоматически распознает листы федеральных округов, 89 региональных строк и показатели «Полного и точного реестра» и УРД.</p>
-      <label class="upload-btn" for="fileInput" style="margin-top:18px">
-        Выбрать файл
-      </label>
-    </div>
+      </section>
 
-    <div id="workspace" class="hidden">
-      <div id="diagnosticsView" class="view hidden">
-        <div class="section-title-row">
-          <div>
-            <div class="eyebrow">ТЕХНИЧЕСКИЙ КОНТРОЛЬ</div>
-            <h2>Диагностика файла</h2>
-            <p>Проверка структуры до построения аналитики.</p>
-          </div>
-          <div class="local-badge">Файл считан локально</div>
-        </div>
-        <div class="panel">
-          <div class="panel-title">
+
+
+      <!-- ======================================= -->
+      <!-- РАБОЧАЯ ОБЛАСТЬ -->
+      <!-- ======================================= -->
+
+      <section
+        id="workspace"
+        class="workspace hidden"
+      >
+
+
+
+        <!-- ===================================== -->
+        <!-- ПОЛНЫЙ И ТОЧНЫЙ РЕЕСТР -->
+        <!-- ===================================== -->
+
+        <section
+          id="registryView"
+          class="view"
+        >
+
+          <div id="registryDashboard"></div>
+
+        </section>
+
+
+
+        <!-- ===================================== -->
+        <!-- УРД -->
+        <!-- ===================================== -->
+
+        <section
+          id="urdView"
+          class="view hidden"
+        >
+
+          <div id="urdDashboard"></div>
+
+        </section>
+
+
+
+        <!-- ===================================== -->
+        <!-- ДИАГНОСТИКА -->
+        <!-- ===================================== -->
+
+        <section
+          id="diagnosticsView"
+          class="view hidden"
+        >
+
+
+          <div class="section-title-row">
+
+
             <div>
-              <h3>Диагностика листов</h3>
-              <p>Если блок не найден, система показывает это явно и ничего не подставляет случайно.</p>
+
+              <div class="eyebrow">
+                ТЕХНИЧЕСКИЙ КОНТРОЛЬ
+              </div>
+
+              <h2>
+                Диагностика файла
+              </h2>
+
+              <p>
+                Проверка структуры
+                до построения аналитики.
+              </p>
+
             </div>
-          </div>
-          <div class="table-wrap">
-            <table class="data-table">
-              <thead>
-                <tr>
-                  <th>Лист</th>
-                  <th>Регионов</th>
-                  <th>Полный и точный реестр</th>
-                  <th>УРД</th>
-                </tr>
-              </thead>
-              <tbody id="diagnosticsBody"></tbody>
-            </table>
-          </div>
-        </div>
-      </div>
 
-      <div id="registryView" class="view hidden"></div>
-      <div id="urdView" class="view hidden"></div>
-    </div>
-  </main>
-</div>
 
-<script src="app.js"></script>
+            <div class="local-badge">
+              Файл считан локально
+            </div>
+
+
+          </div>
+
+
+
+          <div class="panel">
+
+
+            <div class="panel-title">
+
+
+              <div>
+
+                <h3>
+                  Диагностика листов
+                </h3>
+
+                <p>
+
+                  Если блок не найден,
+                  система показывает это явно
+                  и ничего не подставляет случайно.
+
+                </p>
+
+              </div>
+
+
+            </div>
+
+
+
+            <div class="table-wrap">
+
+
+              <table
+                class="data-table diagnostics-table"
+              >
+
+
+                <thead>
+
+                  <tr>
+
+                    <th>
+                      Лист
+                    </th>
+
+                    <th>
+                      Регионов
+                    </th>
+
+                    <th>
+                      Полный и точный реестр
+                    </th>
+
+                    <th>
+                      УРД
+                    </th>
+
+                  </tr>
+
+                </thead>
+
+
+                <tbody id="diagnosticsBody">
+                </tbody>
+
+
+              </table>
+
+
+            </div>
+
+
+          </div>
+
+
+        </section>
+
+
+      </section>
+
+
+    </main>
+
+
+  </div>
+
+
+
+  <!-- ========================================= -->
+  <!-- EXCEL -->
+  <!-- ========================================= -->
+
+  <script
+    src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"
+  ></script>
+
+
+
+  <!-- ========================================= -->
+  <!-- ГРАФИКИ И КАРТА -->
+  <!-- ========================================= -->
+
+  <script
+    src="https://cdn.jsdelivr.net/npm/echarts@5.6.0/dist/echarts.min.js"
+  ></script>
+
+
+
+  <!-- ========================================= -->
+  <!-- НАШ СКРИПТ -->
+  <!-- ========================================= -->
+
+  <script src="app.js?v=10"></script>
+
+
 </body>
+
 </html>
