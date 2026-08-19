@@ -11,6 +11,56 @@ const MAIN_SHEETS = [
 const MAP_URL =
   'https://raw.githubusercontent.com/rnekrasov-msk/geojson/master/russia_subjects_github.json';
 
+
+// Явные соответствия между подписями публичного GeoJSON и названиями в Excel.
+// Они влияют только на визуализацию карты; исходные данные и названия Excel не меняются.
+const REGION_MAP_ALIASES = {
+  'город москва': 'Москва',
+  'moscow': 'Москва',
+  'moscow city': 'Москва',
+  'санкт петербург': 'Санкт-Петербург',
+  'город санкт-петербург': 'Санкт-Петербург',
+  'saint petersburg': 'Санкт-Петербург',
+  'st petersburg': 'Санкт-Петербург',
+  'севастополь': 'Севастополь',
+  'sevastopol': 'Севастополь',
+  'крым': 'Республика Крым',
+  'republic of crimea': 'Республика Крым',
+  'crimea': 'Республика Крым',
+  'ненецкий автономный округ': 'Ненецкий АО',
+  'ненецкий ао': 'Ненецкий АО',
+  'ханты-мансийский автономный округ': 'Ханты-Мансийский АО',
+  'ханты-мансийский автономный округ - югра': 'Ханты-Мансийский АО',
+  'ханты-мансийский ао - югра': 'Ханты-Мансийский АО',
+  'ямало-ненецкий автономный округ': 'Ямало-Ненецкий АО',
+  'чукотский автономный округ': 'Чукотский АО',
+  'еврейская автономная область': 'Еврейская АО',
+  'кемеровская область': 'Кемеровская область - Кузбасс',
+  'кузбасс': 'Кемеровская область - Кузбасс',
+  'чувашская республика': 'Чувашская Республика - Чувашия',
+  'чувашия': 'Чувашская Республика - Чувашия',
+  'северная осетия - алания': 'Республика Северная Осетия - Алания',
+  'республика северная осетия-алания': 'Республика Северная Осетия - Алания',
+  'северная осетия-алания': 'Республика Северная Осетия - Алания',
+  'саха якутия': 'Республика Саха (Якутия)',
+  'якутия': 'Республика Саха (Якутия)',
+  'тыва': 'Республика Тыва',
+  'тува': 'Республика Тыва',
+  'карелия': 'Республика Карелия',
+  'коми': 'Республика Коми',
+  'адыгея': 'Республика Адыгея',
+  'калмыкия': 'Республика Калмыкия',
+  'дагестан': 'Республика Дагестан',
+  'ингушетия': 'Республика Ингушетия',
+  'башкортостан': 'Республика Башкортостан',
+  'марий эл': 'Республика Марий Эл',
+  'мордовия': 'Республика Мордовия',
+  'татарстан': 'Республика Татарстан',
+  'удмуртия': 'Удмуртская Республика',
+  'бурятия': 'Республика Бурятия',
+  'хакасия': 'Республика Хакасия'
+};
+
 const REGISTRY_METRICS = {
   egrn: {
     label: 'Объекты недвижимости в ЕГРН',
@@ -280,6 +330,7 @@ const state = {
     loaded: false,
     loading: false,
     error: null,
+    promise: null,
     matchedNames: new Set()
   }
 };
@@ -320,6 +371,27 @@ function reducedNameKey(value) {
     .replace(/\bао\b/g, '')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+
+function canonicalNameKey(value) {
+  return reducedNameKey(value)
+    .replace(/\bюгра\b/g, '')
+    .replace(/\bкузбасс\b/g, '')
+    .replace(/\bчувашия\b/g, '')
+    .replace(/-/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function aliasMapName(rawName) {
+  const direct = REGION_MAP_ALIASES[nameKey(rawName)];
+  if (direct) return direct;
+
+  const reduced = REGION_MAP_ALIASES[reducedNameKey(rawName)];
+  if (reduced) return reduced;
+
+  return null;
 }
 
 function matrix(ws) {
@@ -913,7 +985,7 @@ function renderKpis(view, rows, metricKey, cfg) {
 
   const secondLabel = cfg.aggregate === 'sum'
     ? 'Сумма по текущему фильтру'
-    : 'Среднее по текущему фильтру';
+    : 'Среднее значение субъектов';
 
   $(view + 'Kpis').innerHTML = `
     <div class="kpi-card primary">
@@ -1120,6 +1192,7 @@ function renderTable(view, rows, metricKey, cfg) {
 function prepareNameMatcher() {
   const exact = new Map();
   const reducedBuckets = new Map();
+  const canonicalBuckets = new Map();
 
   state.data.forEach(row => {
     exact.set(nameKey(row.region), row.region);
@@ -1127,65 +1200,122 @@ function prepareNameMatcher() {
     const reduced = reducedNameKey(row.region);
     if (!reducedBuckets.has(reduced)) reducedBuckets.set(reduced, []);
     reducedBuckets.get(reduced).push(row.region);
+
+    const canonical = canonicalNameKey(row.region);
+    if (!canonicalBuckets.has(canonical)) canonicalBuckets.set(canonical, []);
+    canonicalBuckets.get(canonical).push(row.region);
   });
 
   return rawName => {
+    const alias = aliasMapName(rawName);
+    if (alias && state.data.some(row => row.region === alias)) {
+      return alias;
+    }
+
     const exactMatch = exact.get(nameKey(rawName));
     if (exactMatch) return exactMatch;
 
     const reduced = reducedNameKey(rawName);
-    const bucket = reducedBuckets.get(reduced);
-    if (bucket && bucket.length === 1) return bucket[0];
+    const reducedBucket = reducedBuckets.get(reduced);
+    if (reducedBucket && reducedBucket.length === 1) {
+      return reducedBucket[0];
+    }
+
+    const canonical = canonicalNameKey(rawName);
+    const canonicalBucket = canonicalBuckets.get(canonical);
+    if (canonicalBucket && canonicalBucket.length === 1) {
+      return canonicalBucket[0];
+    }
 
     return null;
   };
 }
 
+function shiftNegativeLongitudes(node) {
+  if (!Array.isArray(node)) return;
+
+  if (
+    node.length >= 2 &&
+    typeof node[0] === 'number' &&
+    typeof node[1] === 'number'
+  ) {
+    if (node[0] < 0) node[0] += 360;
+    return;
+  }
+
+  node.forEach(shiftNegativeLongitudes);
+}
+
 async function ensureRussiaMap() {
-  if (state.map.loaded || state.map.loading || state.map.error) return;
+  if (state.map.loaded) return true;
+  if (state.map.error) return false;
+
+  if (state.map.promise) {
+    return state.map.promise;
+  }
+
   if (typeof echarts === 'undefined') {
     state.map.error = 'Библиотека карты не загрузилась';
-    return;
+    return false;
   }
 
   state.map.loading = true;
 
-  try {
-    const response = await fetch(MAP_URL, { cache: 'force-cache' });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  state.map.promise = (async () => {
+    try {
+      const response = await fetch(MAP_URL, { cache: 'force-cache' });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
-    const geoJson = await response.json();
-    const matchName = prepareNameMatcher();
-    const matched = new Set();
+      const geoJson = await response.json();
+      const matchName = prepareNameMatcher();
+      const matched = new Set();
 
-    (geoJson.features || []).forEach(feature => {
-      const props = feature.properties || (feature.properties = {});
-      const rawName =
-        props.NL_NAME_1 ||
-        props.NAME_1 ||
-        props['name:ru'] ||
-        props.name ||
-        '';
+      (geoJson.features || []).forEach(feature => {
+        const props = feature.properties || (feature.properties = {});
 
-      const dashboardName = matchName(rawName);
+        const rawName =
+          props.NL_NAME_1 ||
+          props.NAME_1 ||
+          props['name:ru'] ||
+          props.name ||
+          '';
 
-      if (dashboardName) {
-        props.dashboardName = dashboardName;
-        matched.add(dashboardName);
-      } else {
-        props.dashboardName = cleanRegionLabel(rawName);
-      }
-    });
+        const dashboardName = matchName(rawName);
 
-    echarts.registerMap('rosreestr-russia', geoJson);
-    state.map.matchedNames = matched;
-    state.map.loaded = true;
-  } catch (error) {
-    console.warn('Не удалось загрузить GeoJSON карты:', error);
-    state.map.error = 'Географическая карта недоступна';
-  } finally {
-    state.map.loading = false;
-  }
+        if (dashboardName) {
+          props.dashboardName = dashboardName;
+          matched.add(dashboardName);
+        } else {
+          props.dashboardName = cleanRegionLabel(rawName);
+        }
+
+        // Чукотка в исходном GeoJSON пересекает 180-й меридиан.
+        // Перенос отрицательных долгот в диапазон 0...360 делает Россию
+        // компактной и заметно крупнее на мобильном экране.
+        if (feature.geometry && feature.geometry.coordinates) {
+          shiftNegativeLongitudes(feature.geometry.coordinates);
+        }
+      });
+
+      echarts.registerMap('rosreestr-russia', geoJson);
+      state.map.matchedNames = matched;
+      state.map.loaded = true;
+      state.map.error = null;
+
+      return true;
+
+    } catch (error) {
+      console.warn('Не удалось загрузить GeoJSON карты:', error);
+      state.map.error = 'Географическая карта недоступна';
+      return false;
+
+    } finally {
+      state.map.loading = false;
+    }
+  })();
+
+  const result = await state.map.promise;
+  return result;
 }
 
 function valueRange(rows, metricKey) {
@@ -1224,9 +1354,9 @@ async function renderMap(view, rows, metricKey, cfg) {
   badge.textContent = 'Подготовка карты';
   note.textContent = '';
 
-  await ensureRussiaMap();
+  const mapReady = await ensureRussiaMap();
 
-  if (!state.map.loaded) {
+  if (!mapReady || !state.map.loaded) {
     renderTileMap(view, rows, metricKey, cfg);
     badge.textContent = 'Схематическая карта';
     note.textContent =
@@ -1279,8 +1409,10 @@ async function renderMap(view, rows, metricKey, cfg) {
       map: 'rosreestr-russia',
       nameProperty: 'dashboardName',
       roam: true,
-      zoom: 1.05,
-      scaleLimit: { min: .75, max: 6 },
+      layoutCenter: ['50%', '49%'],
+      layoutSize: window.innerWidth <= 820 ? '118%' : '108%',
+      zoom: window.innerWidth <= 820 ? 1.08 : 1.02,
+      scaleLimit: { min: .75, max: 7 },
       emphasis: {
         label: { show: false },
         itemStyle: { borderColor: '#063f79', borderWidth: 1.5 }
@@ -1322,7 +1454,7 @@ async function renderMap(view, rows, metricKey, cfg) {
 
   const missing = valid.length - matchedCurrent;
   note.textContent = missing > 0
-    ? `В аналитике учтены все ${valid.length} строк с данными. Для ${missing} строк в подключенном публичном GeoJSON нет сопоставленной геометрии — они остаются в KPI, рейтингах и таблице.`
+    ? `В аналитике учтены все ${valid.length} строк с данными. Публичный GeoJSON содержит или однозначно сопоставляет геометрию для ${matchedCurrent}; остальные ${missing} строк продолжают участвовать в KPI, рейтингах и таблице.`
     : `Все ${valid.length} строк текущей выборки сопоставлены с геометрией карты.`;
 
   requestAnimationFrame(() => chart.resize());
@@ -1394,6 +1526,7 @@ function resetMapState() {
   state.map.loaded = false;
   state.map.loading = false;
   state.map.error = null;
+  state.map.promise = null;
   state.map.matchedNames = new Set();
 
   disposeChart('registryMap');
